@@ -4,8 +4,11 @@ import {
   LoginReqBody,
   LogoutReqBody,
   RegisterReqBody,
+  ResetPasswordReqBody,
   TokenPayload,
-  VerifyEmailReqQuery
+  UpdateMeReqBody,
+  VerifyEmailReqQuery,
+  VerifyForgotPasswordTokenReqbody
 } from '~/models/requests/users.requests'
 import User from '~/models/schemas/User.schema'
 import databaseServices from '~/services/database.services'
@@ -193,4 +196,78 @@ export const forgotPasswordController = async (
       message: USERS_MESSAGES.CHECK_EMAIL_TO_RESET_PASSWORD
     })
   }
+}
+
+export const verifyForgotPasswordTokenController = async (
+  req: Request<ParamsDictionary, any, VerifyForgotPasswordTokenReqbody>,
+  res: Response,
+  next: NextFunction
+) => {
+  //người dùng gửi lên forgot_password_token
+  const { forgot_password_token } = req.body
+  //mình đã xác thực mã rồi
+  //nhưng mà chỉ thực thi khi forgot_password_token còn hiệu lực với user
+  //nên mình cần tìm user thông qua user_id
+  const { user_id } = req.decode_forgot_password_token as TokenPayload
+  //tìm user nào đang có 2 thông tin trên, nếu ko tìm đc nghĩa là forgot_password_token
+  //đã đc thay thế hoặc bị xóa
+  await usersServices.checkForgotPasswordToken({ user_id, forgot_password_token })
+  res.status(HTTP_STATUS.OK).json({
+    message: USERS_MESSAGES.VERIFY_FORGOT_PASSWORD_TOKEN_SUCCESS
+  })
+}
+
+export const resetPasswordController = async (
+  req: Request<ParamsDictionary, any, ResetPasswordReqBody>,
+  res: Response,
+  next: NextFunction
+) => {
+  //người dùng gửi lên forgot_password_token
+  const { forgot_password_token, password } = req.body
+  //mình đã xác thực mã rồi
+  //nhưng mà chỉ thực thi khi forgot_password_token còn hiệu lực với user
+  //nên mình cần tìm user thông qua user_id
+  const { user_id } = req.decode_forgot_password_token as TokenPayload
+  //tìm user nào đang có 2 thông tin trên, nếu ko tìm đc nghĩa là forgot_password_token
+  //đã đc thay thế hoặc bị xóa
+  await usersServices.checkForgotPasswordToken({ user_id, forgot_password_token })
+  //tiến hành reset mk: reset password(chỉ nhớ email) khác change password(nhớ mk cũ)
+  await usersServices.resetPassword({ user_id, password })
+  res.status(HTTP_STATUS.OK).json({
+    message: USERS_MESSAGES.RESET_PASSWORD_SUCCESS
+  })
+}
+
+export const getMeController = async (
+  req: Request<ParamsDictionary, any, any>, //
+  res: Response,
+  next: NextFunction
+) => {
+  //người dùng đã gửi lên access token để xác thực họ đăng nhập và yêu cầu thông tin từ mình
+  const { user_id } = req.decode_authorization as TokenPayload
+  //dùng user_id tìm user
+  const userInfor = await usersServices.getMe(user_id)
+  res.status(HTTP_STATUS.OK).json({
+    message: USERS_MESSAGES.GET_ME_SUCCESS,
+    userInfor
+  })
+}
+
+export const updateMeController = async (
+  req: Request<ParamsDictionary, any, UpdateMeReqBody>, //
+  res: Response,
+  next: NextFunction
+) => {
+  //người dùng truyền lên access token => thu đc user_id
+  const { user_id } = req.decode_authorization as TokenPayload
+  //nội dung mà người dùng muốn truy cập
+  const payload = req.body
+  //kiểm tra xem user đã verify hay ch
+  await usersServices.checkEmailVerified(user_id)
+  //đã verify rồi thì mình tiến hành cập nhật xong thì trả ra thông tin user cập nhật
+  const userInfor = await usersServices.updateMe({ user_id, payload })
+  res.status(HTTP_STATUS.OK).json({
+    meassage: USERS_MESSAGES.UPDATE_PROFILE_SUCCESS,
+    userInfor
+  })
 }

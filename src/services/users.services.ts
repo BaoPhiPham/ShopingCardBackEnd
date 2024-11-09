@@ -1,6 +1,6 @@
 import User from '~/models/schemas/User.schema'
 import databaseServices from './database.services'
-import { LoginReqBody, RegisterReqBody } from '~/models/requests/users.requests'
+import { LoginReqBody, RegisterReqBody, UpdateMeReqBody } from '~/models/requests/users.requests'
 import { hashPassword } from '~/utils/crypto'
 import { signToken } from '~/utils/jwt'
 import { TokenType, UserVerifyStatus } from '~/constants/enums'
@@ -79,11 +79,52 @@ class UsersServices {
     })
     if (!user) {
       throw new ErrorWithStatus({
-        status: HTTP_STATUS.UNPROCESSABLE_ENTITY,
+        status: HTTP_STATUS.UNAUTHORIZED,
         message: USERS_MESSAGES.EMAIL_VERIFY_TOKEN_IS_INVALID
       })
     }
     return user // return user//return ra ngoài để kiểm tra xem có verify hay gì không?
+  }
+
+  async checkForgotPasswordToken({
+    user_id,
+    forgot_password_token
+  }: {
+    user_id: string //
+    forgot_password_token: string
+  }) {
+    //tìm user với 2 thông tin trên, ko có thì chui83, có thì return ra
+    const user = await databaseServices.users.findOne({
+      _id: new ObjectId(user_id),
+      forgot_password_token
+    })
+
+    //nếu ko tìm ra
+    if (!user) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.UNAUTHORIZED,
+        message: USERS_MESSAGES.FORGOT_PASSWORD_TOKEN_IS_INVALID
+      })
+    }
+    //nếu có user thì return ra
+    return user
+  }
+
+  async checkEmailVerified(user_id: string) {
+    //tìm xem đã verify hay ch
+    const user = await databaseServices.users.findOne({
+      _id: new ObjectId(user_id),
+      verify: UserVerifyStatus.Verified
+    })
+    //ch verify
+    if (user) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.FORBBIDEN, //403
+        message: USERS_MESSAGES.USER_NOT_VERIFIED
+      })
+    }
+    //nếu có user, return true hay user đều đc
+    return user
   }
 
   async findUserById(uder_id: string) {
@@ -106,7 +147,7 @@ class UsersServices {
       {
         $set: {
           email_verify_token,
-          update_at: '$$NOW'
+          updated_at: '$$NOW'
         }
       }
     ])
@@ -235,7 +276,7 @@ class UsersServices {
         {
           $set: {
             forgot_password_token,
-            update_at: '$$NOW'
+            updated_at: '$$NOW'
           }
         }
       ]
@@ -246,6 +287,77 @@ class UsersServices {
       http://localhost:8000/users/reset-password/?forgot_password_token=${forgot_password_token}
       `)
     //8000 là cho frontend
+  }
+
+  async resetPassword({ user_id, password }: { user_id: string; password: string }) {
+    await databaseServices.users.updateOne(
+      {
+        _id: new ObjectId(user_id)
+      },
+      [
+        {
+          $set: {
+            password: hashPassword(password),
+            forgot_password_token: '',
+            updated_at: '$$NOW'
+          }
+        }
+      ]
+    )
+  }
+
+  async getMe(user_id: string) {
+    const userInfor = await databaseServices.users.findOne(
+      { _id: new ObjectId(user_id) }, //
+      {
+        projection: {
+          password: 0,
+          email_verify_token: 0,
+          forgot_password_token: 0
+        }
+      }
+    )
+    return userInfor
+  }
+
+  async updateMe({ user_id, payload }: { user_id: string; payload: UpdateMeReqBody }) {
+    //user_id giúp mình tìm được user cần cập nhật
+    //payload là những gì người dung muốn cập nhật, mình ko biết họ đả gửi lên những gì
+    //nếu date_of_birth thì nó cần chuyển về Date
+    const _payload = payload.date_of_birth //_payload chứa thông tin đc đưa và format lại để update
+      ? { ...payload, date_of_birth: new Date(payload.date_of_birth) }
+      : payload
+    //nếu username đc gửi lên thì nó phải là unique
+    if (_payload.username) {
+      const isDup = await databaseServices.users.findOne({ username: _payload.username })
+      if (isDup) {
+        throw new ErrorWithStatus({
+          status: HTTP_STATUS.UNPROCESSABLE_ENTITY,
+          message: USERS_MESSAGES.USERNAME_ALREADY_EXISTS
+        })
+      }
+    }
+    //nếu qua hết thì cập nhật
+    const userInfor = await databaseServices.users.findOneAndUpdate(
+      { _id: new ObjectId(user_id) }, //
+      [
+        {
+          $set: {
+            ..._payload,
+            updated_at: '$$NOW'
+          }
+        }
+      ],
+      {
+        returnDocument: 'after', //trả ra cho t thông tin của user sau khi update
+        projection: {
+          password: 0,
+          email_verify_token: 0,
+          forgot_password_token: 0
+        }
+      }
+    )
+    return userInfor
   }
 }
 
