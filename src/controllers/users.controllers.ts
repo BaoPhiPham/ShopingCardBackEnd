@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response } from 'express'
 import {
+  ChangePasswordReqBody,
   ForgotPasswordReqBody,
   LoginReqBody,
   LogoutReqBody,
+  RefreshTokenReqBody,
   RegisterReqBody,
   ResetPasswordReqBody,
   TokenPayload,
@@ -19,6 +21,7 @@ import HTTP_STATUS from '~/constants/httpStatus'
 import { body } from 'express-validator'
 import { USERS_MESSAGES } from '~/constants/messages'
 import { UserVerifyStatus } from '~/constants/enums'
+import RefreshToken from '~/models/schemas/RefreshToken.schema'
 
 // controller la handler co nhiem vu xu ly logic
 // cac thoong tin khi da vao controller thi phai clear
@@ -269,5 +272,40 @@ export const updateMeController = async (
   res.status(HTTP_STATUS.OK).json({
     meassage: USERS_MESSAGES.UPDATE_PROFILE_SUCCESS,
     userInfor
+  })
+}
+
+export const changePasswordController = async (
+  req: Request<ParamsDictionary, any, ChangePasswordReqBody>, //
+  res: Response,
+  next: NextFunction
+) => {
+  const { user_id } = req.decode_authorization as TokenPayload
+  const { old_password, password } = req.body
+  await usersServices.changePassword({
+    user_id,
+    old_password,
+    password
+  })
+  //nếu đổi thành công
+  res.status(HTTP_STATUS.OK).json({
+    message: USERS_MESSAGES.CHANGE_PASSWORD_SUCCESS
+  })
+}
+
+export const refreshTokenController = async (
+  req: Request<ParamsDictionary, any, RefreshTokenReqBody>, //
+  res: Response,
+  next: NextFunction
+) => {
+  const { user_id } = req.decode_refresh_token as TokenPayload
+  const { refresh_token } = req.body
+  await usersServices.checkRefreshToken({ user_id, refresh_token })
+  //nếu ktr refresh_token còn hiệu lực thì tiến hành refreshToken cho người dùng
+  const result = await usersServices.refreshToken({ user_id, refresh_token })
+  //trả cho người dùng
+  res.status(HTTP_STATUS.OK).json({
+    message: USERS_MESSAGES.REFRESH_TOKEN_IS_SUCCESS,
+    result //ac và rf mới
   })
 }

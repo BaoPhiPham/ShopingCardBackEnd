@@ -1,9 +1,12 @@
 import express, { Request, Response } from 'express'
+import { wrap } from 'module'
 import {
+  changePasswordController,
   forgotPasswordController,
   getMeController,
   loginController,
   logoutController,
+  refreshTokenController,
   registerController,
   resendEmailVerifyController,
   resetPasswordController,
@@ -11,8 +14,10 @@ import {
   verifyEmailController,
   verifyForgotPasswordTokenController
 } from '~/controllers/users.controllers'
+import { filterMiddleware } from '~/middlewares/common.middlewares'
 import {
   accessTokenValidator,
+  changePasswordValidator,
   forgotPasswordTokenValidator,
   forgotPasswordValidator,
   loginValidator,
@@ -22,6 +27,7 @@ import {
   updateMeValidator,
   verifyEmailTokenValidator
 } from '~/middlewares/users.middlewares'
+import { UpdateMeReqBody } from '~/models/requests/users.requests'
 import { wrapAsync } from '~/utils/handlers'
 //đựng user Router
 const userRouter = express.Router()
@@ -152,9 +158,46 @@ body: {
 */
 userRouter.patch(
   '/me',
+  filterMiddleware<UpdateMeReqBody>([
+    'name',
+    'date_of_birth',
+    'bio',
+    'location',
+    'website',
+    'avatar',
+    'username',
+    'cover_photo'
+  ]), //cần 1 hàm sàng lọc req.body ở đây, nhìn khá xấu có thể làm thành constant bỏ vào hoặc khi build xong r ms xài tk này
   accessTokenValidator, //
   updateMeValidator, //
   wrapAsync(updateMeController)
+)
+
+/*desc: change-password: đổi mật khẩu
+path: users/change-password
+method: put(gửi lên và mong đợi đc update 1 thông tin, con2 patch là cập nhật nhìu thông tin, post là gửi lên và nhận về)
+headers: {
+  Authorization: 'Bearer <access_token>'
+}
+body:{
+  old_password: string,
+  password: string,
+  confirm_password: string
+}
+*/
+userRouter.put('/change-password', accessTokenValidator, changePasswordValidator, wrapAsync(changePasswordController))
+
+/*desc: refresh-token(để cho tụi fron end call về để nhận ac và rf mới)
+=> chức năng này dùng khi ac hết hạn, cần lấy về ac mới(quà tặng kèm rf mới) 
+path: users/refresh-token (chỉ gửi lên r xóa thay thế rồi nhận về)
+body:{
+  refresh_token: string
+}
+*/
+userRouter.post(
+  '/refresh-token',
+  refreshTokenValidator, //
+  wrapAsync(refreshTokenController)
 )
 
 export default userRouter

@@ -24,7 +24,7 @@ class UsersServices {
     return signToken({
       payload: { user_id, token_type: TokenType.RefreshToken },
       privateKey: process.env.JWT_SECRET_REFRESH_TOKEN as string,
-      options: { expiresIn: process.env.REFESH_TOKEN_EXPIRE_IN }
+      options: { expiresIn: process.env.REFRESH_TOKEN_EXPIRE_IN }
     })
   }
 
@@ -164,6 +164,8 @@ class UsersServices {
     const result = await databaseServices.users.insertOne(
       new User({
         _id: user_id,
+        username: `user${user_id.toString()}`, //người dùng có thể cập nhật
+        //=>_id và username là 2 key unique và chỉ có key username đc sửa,username dùng để truy xuất trong database thay cho _id
         email_verify_token,
         ...payLoad,
         password: hashPassword(payLoad.password),
@@ -358,6 +360,68 @@ class UsersServices {
       }
     )
     return userInfor
+  }
+
+  async changePassword({
+    user_id,
+    old_password,
+    password
+  }: {
+    user_id: string
+    old_password: string
+    password: string
+  }) {
+    //dùng user_id và old_password để tìm user => biết đc người dùng có thực sự sở hữu account hay ko
+    const user = await databaseServices.users.findOne({
+      _id: new ObjectId(user_id),
+      password: hashPassword(old_password)
+    })
+    //nếu tìm ko ra thì nghĩa là thằng client ko phải chủ acc
+    if (!user) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.NOT_FOUND,
+        message: USERS_MESSAGES.USER_NOT_FOUND
+      })
+    }
+    //nếu mà có thì mình tiến hành cập nhật password mới
+    await databaseServices.users.updateOne(
+      { _id: new ObjectId(user_id) }, //
+      [
+        {
+          $set: {
+            password: hashPassword(password),
+            updated_at: '$$NOW'
+          }
+        }
+      ]
+    )
+  }
+
+  async refreshToken({
+    user_id, //
+    refresh_token
+  }: {
+    user_id: string
+    refresh_token: string
+  }) {
+    const [access_token, new_refresh_token] = await Promise.all([
+      this.signAccessToken(user_id),
+      this.signRefreshToken(user_id)
+    ])
+    //lưu refresh_token mới vào database
+    await databaseServices.refresh_tokens.insertOne(
+      new RefreshToken({
+        token: new_refresh_token,
+        user_id: new ObjectId(user_id)
+      })
+    )
+    //và xóa refresh_token cũ để ko ai dùng nửa
+    await databaseServices.refresh_tokens.deleteOne({ token: refresh_token })
+    //gửi cặp mã mới cho người dùng
+    return {
+      access_token,
+      refresh_token: new_refresh_token
+    }
   }
 }
 

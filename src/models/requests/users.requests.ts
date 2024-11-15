@@ -53,3 +53,14 @@ export interface UpdateMeReqBody {
   avatar?: string // optional
   cover_photo?: string // optional
 }
+
+export interface ChangePasswordReqBody {
+  old_password: string
+  password: string
+  confirm_password: string
+}
+
+export interface RefreshTokenReqBody {
+  refresh_token: string
+}
+//mấy cái schema là back và front đều xài
