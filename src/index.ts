@@ -4,6 +4,7 @@ import databaseServices from './services/database.services'
 import { defaultErrorHandler } from './middlewares/error.middlewares'
 import mediaRouter from './routes/medias.routers'
 import { initFolder } from './utils/file'
+import staticRouter from './routes/static.routers'
 
 // dùng express tạo server
 const app = express()
@@ -16,9 +17,10 @@ app.use(express.json())
 //server dùng userRouter
 app.use('/users', userRouter)
 app.use('/medias', mediaRouter)
+app.use('/static', staticRouter)
 
 //xu ly loi tong
-userRouter.use(defaultErrorHandler)
+app.use(defaultErrorHandler)
 
 //app mở ở PORT 3000
 // localhost3000/uses/login  req.body{emai, password}
